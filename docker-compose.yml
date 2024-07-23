@@ -1,0 +1,322 @@
+﻿version: '3.9'
+
+services:
+  
+  gateway-service:
+    build:
+      context: ./src/CertainCourse.GatewayService
+      dockerfile: Dockerfile
+    container_name: gateway-service
+    ports:
+      - "5083:8081"
+    environment:
+      - CERTAIN_COURSE_CUSTOMER_SERVICE_ADDRESS=http://customer-service:8080
+      - CERTAIN_COURSE_ORDER_SERVICE_1_ADDRESS=http://order-service-1:8080
+      - CERTAIN_COURSE_ORDER_SERVICE_2_ADDRESS=http://order-service-2:8080
+      - CERTAIN_COURSE_HTTP_PORT=8081
+
+  order-service-1:
+    build:
+      context: ./src/OrderService/CertainCourse.OrderService
+      dockerfile: Dockerfile
+    depends_on:
+      - init-brokers
+      - service-discovery
+      - order-service-db-1
+      - order-service-db-2
+      - redis-order-service
+    container_name: order-service-1
+    ports:
+      - "5084:8080"
+    environment:
+      - CERTAIN_COURSE_LOGISTIC_SIMULATOR_ADDRESS=http://logistic-simulator:8080
+      - CERTAIN_COURSE_SD_ADDRESS=http://service-discovery:8080
+      - CERTAIN_COURSE_GRPC_PORT=8080
+      - CERTAIN_COURSE_KAFKA_BROKERS=broker-1:9091
+      - CERTAIN_COURSE_KAFKA_PRE_ORDER_TOPIC=pre_orders
+      - CERTAIN_COURSE_KAFKA_NEW_ORDER_TOPIC=new_orders
+      - CERTAIN_COURSE_KAFKA_ORDER_EVENTS_TOPIC=orders_events
+      - CERTAIN_COURSE_REDIS_CONNECT=redis-order-service
+      - CERTAIN_COURSE_REDIS_DATABASE=0
+      - CERTAIN_COURSE_CUSTOMER_ADDRESS=http://customer-service:8080
+      - CERTAIN_COURSE_DATABASE_MIGRATE_NEEDED=false
+  
+  order-service-2:
+    build:
+      context: ./src/OrderService/CertainCourse.OrderService
+      dockerfile: Dockerfile
+    depends_on:
+      - init-brokers
+      - service-discovery
+      - order-service-db-1
+      - order-service-db-2
+      - redis-order-service
+    container_name: order-service-2
+    ports:
+      - "5085:8080"
+    environment:
+      - CERTAIN_COURSE_LOGISTIC_SIMULATOR_ADDRESS=http://logistic-simulator:8080
+      - CERTAIN_COURSE_SD_ADDRESS=http://service-discovery:8080
+      - CERTAIN_COURSE_CUSTOMER_ADDRESS=http://customer-service:8080
+      - CERTAIN_COURSE_KAFKA_BROKERS=broker-1:9091
+      - CERTAIN_COURSE_KAFKA_PRE_ORDER_TOPIC=pre_orders
+      - CERTAIN_COURSE_KAFKA_NEW_ORDER_TOPIC=new_orders
+      - CERTAIN_COURSE_KAFKA_ORDER_EVENTS_TOPIC=orders_events
+      - CERTAIN_COURSE_REDIS_CONNECT=redis-order-service
+      - CERTAIN_COURSE_REDIS_DATABASE=0
+      - CERTAIN_COURSE_GRPC_PORT=8080
+      - CERTAIN_COURSE_DATABASE_MIGRATE_NEEDED=false
+  
+  order-service-db-1:
+    image: postgres:latest
+    container_name: order-service-db-1
+    environment:
+      - POSTGRES_DB=order-service
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+    ports:
+      - "5403:5432"
+    volumes:
+      - order-service-db-1:/var/lib/postgresql/data
+  
+  order-service-db-2:
+    image: postgres:latest
+    container_name: order-service-db-2
+    environment:
+      - POSTGRES_DB=order-service
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+    ports:
+      - "5404:5432"
+    volumes:
+      - order-service-db-2:/var/lib/postgresql/data
+
+  customer-service:
+    image: some-gitlab-registry/customer-service
+    container_name: customer-service
+    depends_on:
+      - customer-service-db-1
+      - customer-service-db-2
+    ports:
+      - "5081:8080"
+    environment:
+      - CERTAIN_COURSE_SD_ADDRESS=http://service-discovery:8080
+      - CERTAIN_COURSE_GRPC_PORT=8080
+      - CERTAIN_COURSE_HTTP_PORT=8081
+  
+  customer-service-db-1:
+    image: postgres:latest
+    container_name: customer-service-db-1
+    environment:
+      - POSTGRES_DB=customer-service
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+    ports:
+      - "5401:5432"
+    volumes:
+      - customer-service-db-1:/var/lib/postgresql/data
+  
+  customer-service-db-2:
+    image: postgres:latest
+    container_name: customer-service-db-2
+    environment:
+      - POSTGRES_DB=customer-service
+      - POSTGRES_USER=test
+      - POSTGRES_PASSWORD=test
+    ports:
+      - "5402:5432"
+    volumes:
+      - customer-service-db-2:/var/lib/postgresql/data
+  
+  logistic-simulator:
+    image: some-gitlab-registry/logistics-simulator
+    container_name: logistic-simulator
+    depends_on:
+      - init-brokers
+      - order-service-1
+      - order-service-2
+      - redis-logistic-simulator
+    environment:
+      - CERTAIN_COURSE_KAFKA_BROKERS=broker-1:9091
+      - CERTAIN_COURSE_REDIS_CONNECT=redis-logistic-simulator
+    ports:
+      - "5082:8080"
+  
+  orders-generator-web:
+    image: some-gitlab-registry/orders-generator
+    container_name: orders-generator-web
+    depends_on:
+      - init-brokers
+      - order-service-1
+      - order-service-2
+    environment:
+      - CERTAIN_COURSE_ORDER_SOURCE=WebSite
+      - CERTAIN_COURSE_KAFKA_BROKERS=broker-1:9091
+      - CERTAIN_COURSE_ORDER_REQUEST_TOPIC=pre_orders
+      - CERTAIN_COURSE_CUSTOMER_ADDRESS=http://customer-service:8080
+  
+  orders-generator-mobile:
+    image: some-gitlab-registry/orders-generator
+    container_name: orders-generator-mobile
+    depends_on:
+      - init-brokers
+      - order-service-1
+      - order-service-2
+    environment:
+      - CERTAIN_COURSE_ORDER_SOURCE=Mobile
+      - CERTAIN_COURSE_KAFKA_BROKERS=broker-1:9091
+      - CERTAIN_COURSE_ORDER_REQUEST_TOPIC=pre_orders
+      - CERTAIN_COURSE_CUSTOMER_ADDRESS=http://customer-service:8080
+  
+  orders-generator-api:
+    image: some-gitlab-registry/orders-generator
+    container_name: orders-generator-api
+    depends_on:
+      - init-brokers
+      - order-service-1
+      - order-service-2
+    environment:
+      - CERTAIN_COURSE_ORDER_SOURCE=Api
+      - CERTAIN_COURSE_KAFKA_BROKERS=broker-1:9091
+      - CERTAIN_COURSE_ORDER_REQUEST_TOPIC=pre_orders
+      - CERTAIN_COURSE_CUSTOMER_ADDRESS=http://customer-service:8080
+  
+  service-discovery:
+    image: some-gitlab-registry/service-discovery
+    container_name: service-discovery
+    environment:
+      - CERTAIN_COURSE_UPDATE_TIMEOUT=10
+      - CERTAIN_COURSE_DB_STATE=customers-cluster:0-3:customer-service-db-1:5432;customers-cluster:4-7:customer-service-db-2:5432;orders-cluster:0-3:order-service-db-1:5432;orders-cluster:4-7:order-service-db-2:5432;
+    ports:
+      - "5500:8080"
+  
+  zookeeper:
+    image: 'confluentinc/cp-zookeeper:7.3.2'
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_SERVER_ID: '1'
+      ZOOKEEPER_SERVERS: 'zookeeper:2888:3888'
+      ZOOKEEPER_CLIENT_PORT: '2181'
+      ZOOKEEPER_PEER_PORT: '2888'
+      ZOOKEEPER_LEADER_PORT: '3888'
+      ZOOKEEPER_INIT_LIMIT: '10'
+      ZOOKEEPER_SYNC_LIMIT: '5'
+      ZOOKEEPER_MAX_CLIENT_CONNS: '5'
+  
+  broker-1:
+    image: 'confluentinc/cp-kafka:7.3.2'
+    container_name: broker-1
+    depends_on:
+      - zookeeper
+    ports:
+      - "29091:29091"
+    environment:
+      KAFKA_BROKER_ID: '1'
+      KAFKA_BROKER_RACK: '1'
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENERS: 'LISTENER_INTERNAL://:9091,LISTENER_LOCAL://:29091'
+      KAFKA_ADVERTISED_LISTENERS: 'LISTENER_INTERNAL://broker-1:9091,LISTENER_LOCAL://localhost:29091'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'LISTENER_INTERNAL'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'LISTENER_INTERNAL:PLAINTEXT,LISTENER_LOCAL:PLAINTEXT'
+      KAFKA_DEFAULT_REPLICATION_FACTOR: '2'
+    healthcheck:
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9091", "--list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  broker-2:
+    image: 'confluentinc/cp-kafka:7.3.2'
+    container_name: broker-2
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: '2'
+      KAFKA_BROKER_RACK: '2'
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENERS: 'LISTENER_INTERNAL://:9091,LISTENER_LOCAL://:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'LISTENER_INTERNAL://broker-2:9091,LISTENER_LOCAL://localhost:29092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'LISTENER_INTERNAL'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'LISTENER_INTERNAL:PLAINTEXT,LISTENER_LOCAL:PLAINTEXT'
+      KAFKA_DEFAULT_REPLICATION_FACTOR: '2'
+    healthcheck:
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9091", "--list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  
+  broker-3:
+    image: 'confluentinc/cp-kafka:7.3.2'
+    container_name: broker-3
+    depends_on:
+      - zookeeper
+    ports:
+      - "29093:29093"
+    environment:
+      KAFKA_BROKER_ID: '3'
+      KAFKA_BROKER_RACK: '3'
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENERS: 'LISTENER_INTERNAL://:9091,LISTENER_LOCAL://:29093'
+      KAFKA_ADVERTISED_LISTENERS: 'LISTENER_INTERNAL://broker-3:9091,LISTENER_LOCAL://localhost:29093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'LISTENER_INTERNAL'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'LISTENER_INTERNAL:PLAINTEXT,LISTENER_LOCAL:PLAINTEXT'
+      KAFKA_DEFAULT_REPLICATION_FACTOR: '2'
+    healthcheck:
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9091", "--list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  
+  init-brokers:
+    image: 'confluentinc/cp-kafka:7.3.2'
+    depends_on:
+      broker-1:
+        condition: service_healthy
+      broker-2:
+        condition: service_healthy
+      broker-3:
+        condition: service_healthy
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      kafka-topics --bootstrap-server broker-1:9091 --list
+
+      echo -e 'Creating kafka topics for broker 1'
+      kafka-topics --bootstrap-server broker-1:9091 --create --if-not-exists --topic pre_orders --replication-factor 2 --partitions 3
+      kafka-topics --bootstrap-server broker-1:9091 --create --if-not-exists --topic orders_events --replication-factor 2 --partitions 3
+      kafka-topics --bootstrap-server broker-1:9091 --create --if-not-exists --topic new_orders --replication-factor 2 --partitions 3
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server broker-1:9091 --list
+      "
+  
+  redis-logistic-simulator:
+    image: redis:latest
+    container_name: redis-logistic-simulator
+    ports:
+      - "6379:6379"
+  
+  redis-order-service:
+    image: redis:latest
+    container_name: redis-order-service
+    ports:
+      - "6380:6380"
+    volumes:
+      - ./init-redis-orders-service.sh:/docker-entrypoint-initdb.d/init-redis-orders-service.sh
+    entrypoint: [ "sh", "/docker-entrypoint-initdb.d/init-redis-orders-service.sh" ]
+
+volumes:
+  customer-service-db-1:
+    name: customer-service-db-1
+  customer-service-db-2:
+    name: customer-service-db-2
+  
+  order-service-db-1:
+    name: order-service-db-1
+  order-service-db-2:
+    name: order-service-db-2

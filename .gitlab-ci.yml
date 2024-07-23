@@ -1,0 +1,62 @@
+stages:
+  - trigger
+  - build
+  - test
+  - deploy
+  
+build_gateway_service:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:8.0.200
+  script:
+    - echo "Building GatewayService..."
+    - dotnet build ./src/CertainCourse.GatewayService/CertainCourse.GatewayService.csproj -c Release
+
+build_orders_service:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:8.0.200
+  script:
+    - echo "Building OrderService..."
+    - dotnet build ./src/OrderService/CertainCourse.OrderService/CertainCourse.OrderService.csproj -c Release
+
+test_gateway_service:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0.200
+  script:
+    - echo "Running tests for GatewayService..."
+    - dotnet test ./tests/UnitTests/CertainCourse.GatewayService.UnitTests/CertainCourse.GatewayService.UnitTests.csproj --verbosity normal
+
+test_orders_service:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0.200
+  script:
+    - echo "Running tests for OrderService..."
+    - dotnet test ./tests/UnitTests/CertainCourse.OrderService.UnitTests/CertainCourse.OrderService.UnitTests.csproj --verbosity normal
+    - dotnet test ./tests/UnitTests/CertainCourse.OrderService.Domain.UnitTests/CertainCourse.OrderService.Domain.UnitTests.csproj --verbosity normal
+    - dotnet test ./tests/UnitTests/CertainCourse.OrderService.Infrastructure.UnitTests/CertainCourse.OrderService.Infrastructure.UnitTests.csproj --verbosity normal
+    - dotnet test ./tests/UnitTests/CertainCourse.OrderService.Application.UnitTests/CertainCourse.OrderService.Application.UnitTests.csproj --verbosity normal
+
+deploy_gateway_service:
+  stage: deploy
+  rules:
+    - when: manual
+  image: docker:latest
+  services:
+    - name: docker:dind
+  script:
+    - echo "Building and pushing Docker image for GatewayService..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker buildx create --use
+    - docker buildx build --provenance false --platform linux/amd64,linux/arm64 -t some-gitlab-registry/gateway-service:latest --push ./src/CertainCourse.GatewayService
+
+deploy_orders_service:
+  stage: deploy
+  rules:
+    - when: manual
+  image: docker:latest
+  services:
+    - name: docker:dind
+  script:
+    - echo "Building and pushing Docker image for OrderService..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker buildx create --use
+    - docker buildx build --provenance false --platform linux/amd64,linux/arm64 -t some-gitlab-registry/orders-service:latest --push ./src/CertainCourse.OrderService

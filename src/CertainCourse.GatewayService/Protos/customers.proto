@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option csharp_namespace = "CertainCourse.Customers.Grpc";
+
+service Customers {
+  rpc GetCustomers(GetCustomersRequest) returns (GetCustomersResponse);
+}
+
+// ---  GetCustomers  ---
+
+message GetCustomersRequest {
+}
+
+message GetCustomersResponse {
+  repeated Customer customers = 1;
+}
+
+message Customer {
+  int32 id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string mobile_number = 4;
+  string email = 5;
+  Address default_address = 6;
+  repeated Address addressed = 7;
+}
+
+message Address {
+  string region = 1;
+  string city = 2;
+  string street = 3;
+  string building = 4;
+  string apartment = 5;
+  double latitude = 6;
+  double longitude = 7;
+}
+
+
+
